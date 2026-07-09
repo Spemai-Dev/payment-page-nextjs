@@ -1,0 +1,253 @@
+@import "./globals.css";
+
+/* Premium Custom CSS for OnePay Payment Page */
+
+:root {
+  --primary-color: #0c3321;
+  --primary-hover: #072216;
+  --secondary-bg: #f8fafc;
+  --card-border: rgba(226, 232, 240, 0.8);
+  --accent-color: #10b981;
+}
+
+/* Base Body Modifications */
+body {
+  background-color: #fafbfc;
+  color: #1e293b;
+}
+
+/* Premium Card and Panels */
+.payment-panel-left {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 4px 20px -2px rgba(148, 163, 184, 0.08), 0 2px 8px -1px rgba(148, 163, 184, 0.04);
+  transition: all 0.3s ease;
+}
+
+.payment-panel-right {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: all 0.3s ease;
+}
+
+/* Premium Items list */
+.payment-item-row {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.payment-item-row:hover {
+  background-color: rgba(241, 245, 249, 0.6);
+  transform: translateX(4px);
+}
+
+/* Custom Styled Input Fields */
+.payment-input-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.payment-input {
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: #1e293b;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.payment-input:focus {
+  outline: none;
+  border-color: #0c3321;
+  box-shadow: 0 0 0 4px rgba(12, 51, 33, 0.08);
+}
+
+.payment-input.input-error {
+  border-color: #ef4444;
+}
+
+.payment-input.input-error:focus {
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+}
+
+/* Beautiful Label styling */
+.payment-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Custom Styled Checkbox */
+.payment-checkbox-container {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  gap: 10px;
+}
+
+.payment-checkbox-custom {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.payment-checkbox-container:hover .payment-checkbox-custom {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+.payment-checkbox-input:checked+.payment-checkbox-custom {
+  border-color: #0c3321;
+  background-color: #0c3321;
+}
+
+.payment-checkbox-checkmark {
+  color: #ffffff;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.payment-checkbox-input:checked+.payment-checkbox-custom .payment-checkbox-checkmark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Premium Primary Button */
+.payment-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #0c3321;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 16px 24px;
+  border-radius: 14px;
+  box-shadow: 0 4px 12px rgba(12, 51, 33, 0.15);
+  border: 1px solid rgba(12, 51, 33, 0.1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.payment-btn-primary:hover:not(:disabled) {
+  background-color: #072216;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(12, 51, 33, 0.25);
+}
+
+.payment-btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px rgba(12, 51, 33, 0.15);
+}
+
+.payment-btn-primary:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Premium Custom Header */
+.payment-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #ffffff;
+  border-radius: 24px;
+  padding: 16px 28px;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Payable Amount Card Custom styles */
+.payment-amount-card {
+  background: linear-gradient(135deg, #e2eaf4 0%, #d5e3f1 100%);
+  border: 1px solid rgba(226, 234, 244, 0.5);
+  border-radius: 20px;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+/* Dialog and Modals */
+.premium-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: fadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.premium-modal-content {
+  background-color: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--card-border);
+  transform: scale(0.95);
+  animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleUp {
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Custom Scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
