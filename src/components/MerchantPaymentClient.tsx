@@ -64,7 +64,11 @@ export default function MerchantPaymentClient({
   // Initialize amount
   useEffect(() => {
     if (pageData.is_plain_text) {
-      if (!pageData.required_amount) {
+      if (pageData.amount && parseFloat(pageData.amount) > 0) {
+        setAmount(String(pageData.amount));
+      } else if (pageData.rest_amount && parseFloat(pageData.rest_amount) > 0) {
+        setAmount(String(pageData.rest_amount));
+      } else if (!pageData.required_amount) {
         setAmount(String(pageInfo.net_amount || "0.00"));
       } else {
         setAmount("");
@@ -77,7 +81,7 @@ export default function MerchantPaymentClient({
       );
       setAmount(total.toFixed(2));
     }
-  }, [selectedItems, pageData.is_plain_text, pageData.required_amount, pageInfo.net_amount]);
+  }, [selectedItems, pageData.is_plain_text, pageData.required_amount, pageInfo.net_amount, pageData.amount, pageData.rest_amount]);
 
   // Handle item checkbox change
   const handleItemCheck = (choice: any, checked: boolean) => {
@@ -239,22 +243,21 @@ export default function MerchantPaymentClient({
     if (!touched[fieldName]) return "";
     return validateAdditionalField(fieldName, type, additionalData[fieldName] || "");
   };
-
   return (
-    <div className="flex flex-col min-h-screen bg-[#fafbfc] font-sans text-slate-800 antialiased p-4 sm:p-8 max-w-7xl mx-auto w-full gap-8 animate-fade-in">
+    <div className="payment-page-container">
       {/* Header Section */}
       <header className="payment-header flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {merchant.merchant_logo ? (
-            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+            <div className="merchant-logo-circle">
               <img
                 src={`${imageBaseUrl}${merchant.merchant_logo}`}
                 alt="Merchant Logo"
-                className="w-full h-full object-contain p-1"
+                className="w-full h-full object-contain"
               />
             </div>
           ) : (
-            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+            <div className="relative w-11 h-11 rounded-full overflow-hidden border border-gray-200 bg-white flex items-center justify-center flex-shrink-0">
               <img
                 src="/assets/default_pro_pic.jpg"
                 alt="Default Merchant Logo"
@@ -375,37 +378,37 @@ export default function MerchantPaymentClient({
         {/* RIGHT SIDE PANEL (Payable Amount & Payment Form) */}
         <section className="lg:col-span-6 payment-panel-right rounded-[32px] p-4 pt-0 sm:px-0 sm:pt-0 sm:pb-2 space-y-6">
           {/* Payable Amount Card */}
-          <div className="payment-amount-card">
-            <span className="text-xl font-bold text-[#0a2540]">Payable amount</span>
-            <span className="text-2xl sm:text-3xl font-extrabold text-[#0a2540] font-mono tracking-tight">
-              {parseFloat(amount || "0").toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-
-          {/* Form Fields Section */}
-          <div className="space-y-5">
-            <form onSubmit={handleProceed} className="space-y-4">
-              {/* Dynamically handle if editable amount is requested */}
-              {pageData.is_plain_text && pageData.required_amount && (
-                <div className="payment-input-group">
-                  <label className="payment-label">
-                    Amount ({currency}) <span className="text-red-500 font-bold">*</span>
-                  </label>
+          <div>
+            <div className="payment-amount-card">
+              <span className="text-xl font-bold text-[#0a2540]">Payable amount</span>
+              {pageData.is_plain_text && pageData.required_amount ? (
+                <div className="flex items-center gap-1.5 bg-white/60 px-3 py-1.5 rounded-lg border border-[#0a2540]/10 shadow-sm focus-within:border-[#0a2540]/30 transition-colors">
+                  <span className="text-xl font-bold text-[#0a2540]/80">{currency}</span>
                   <input
                     type="text"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     onBlur={() => setTouched({ ...touched, amount: true })}
                     placeholder="0.00"
-                    className={`payment-input ${getFieldError("amount") ? "input-error" : ""}`}
+                    className="w-28 bg-transparent text-right text-xl sm:text-2xl font-extrabold text-[#0a2540] font-mono outline-none"
                   />
-                  {getFieldError("amount") && (
-                    <p className="text-xs font-semibold text-red-500 mt-1">
-                      {getFieldError("amount")}
-                    </p>
-                  )}
                 </div>
+              ) : (
+                <span className="text-2xl sm:text-3xl font-extrabold text-[#0a2540] font-mono tracking-tight">
+                  {parseFloat(amount || "0").toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
               )}
+            </div>
+            {/* {pageData.is_plain_text && pageData.required_amount && getFieldError("amount") && (
+              <p className="text-xs font-semibold text-red-500 mt-1.5 px-1">
+                {getFieldError("amount")}
+              </p>
+            )} */}
+          </div>
+
+          {/* Form Fields Section */}
+          <div className="space-y-5">
+            <form onSubmit={handleProceed} className="space-y-4">
 
               {/* First Name & Last Name */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -519,31 +522,34 @@ export default function MerchantPaymentClient({
                 );
               })}
 
-              {/* Checkbox and Pay Button Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center pt-4">
-                <div className="flex items-center">
-                  <label className="payment-checkbox-container">
-                    <input
-                      type="checkbox"
-                      checked={agreedToTerms}
-                      onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      className="sr-only peer payment-checkbox-input"
-                    />
-                    <div className="payment-checkbox-custom">
-                      <Check className="payment-checkbox-checkmark h-3.5 w-3.5 stroke-[3px]" />
-                    </div>
-                    <span className="text-xs text-slate-500 font-medium">
-                      I agree to the{" "}
-                      <button
-                        type="button"
-                        onClick={() => setShowTermsModal(true)}
-                        className="text-[#198754] hover:text-[#146c43] underline font-semibold focus:outline-none cursor-pointer"
-                      >
-                        Terms & Conditions
-                      </button>
-                    </span>
-                  </label>
-                </div>
+              {/* Checkbox Row */}
+              <div className="pt-2">
+                <label className="payment-checkbox-container">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="sr-only peer payment-checkbox-input"
+                  />
+                  <div className="payment-checkbox-custom">
+                    <Check className="payment-checkbox-checkmark h-3.5 w-3.5 stroke-[3px]" />
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    I agree to the{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowTermsModal(true)}
+                      className="text-[#198754] hover:text-[#146c43] underline font-semibold focus:outline-none cursor-pointer"
+                    >
+                      Terms & Conditions
+                    </button>
+                  </span>
+                </label>
+              </div>
+
+              {/* Pay Button Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                <div className="hidden sm:block"></div>
                 <div>
                   <button
                     type="submit"
@@ -558,7 +564,7 @@ export default function MerchantPaymentClient({
             </form>
 
             {/* Footer contacts & info */}
-            <footer className="mt-8 flex flex-col items-end gap-1.5 text-xs font-semibold text-[#95a5b5] w-full">
+            <footer className="mt-12 sm:mt-24 flex flex-col items-end gap-1.5 text-xs font-semibold text-[#95a5b5] w-full">
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-end mb-2">
                 {merchant.merchant_mobile && (
                   <span className="flex items-center gap-1.5 hover:text-slate-600 transition-colors">
