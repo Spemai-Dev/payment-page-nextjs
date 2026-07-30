@@ -282,7 +282,7 @@ export default function MerchantPaymentClient({
       </header>
 
       {/* Main Grid Content */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:items-stretch items-start">
         {/* LEFT SIDE PANEL (Details & Items) */}
         <section className="lg:col-span-6 payment-panel-left rounded-[32px] overflow-hidden flex flex-col">
           <div className="bg-[#e2eaf4]/60 px-8 py-7 space-y-1 border-b border-slate-100">
@@ -548,7 +548,7 @@ export default function MerchantPaymentClient({
               </div>
 
               {/* Pay Button Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div className="hidden sm:block"></div>
                 <div>
                   <button
@@ -564,7 +564,7 @@ export default function MerchantPaymentClient({
             </form>
 
             {/* Footer contacts & info */}
-            <footer className="mt-12 sm:mt-24 flex flex-col items-end gap-1.5 text-xs font-semibold text-[#95a5b5] w-full">
+            <footer className="mt-12 sm:mt-12 flex flex-col items-end gap-1.5 text-xs font-semibold text-[#95a5b5] w-full">
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-end mb-2">
                 {merchant.merchant_mobile && (
                   <span className="flex items-center gap-1.5 hover:text-slate-600 transition-colors">

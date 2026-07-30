@@ -3,9 +3,8 @@ import { responseDecrypt } from "./encryption";
 const API_BASE_URL = "https://merchant-api-live-v2.onepay.lk/api/";
 
 export async function verifyTransaction(pageId: string, transactionId: string = ""): Promise<any> {
-  const url = `${API_BASE_URL}payment-page/ref/?ref_id=${pageId}${
-    transactionId ? `&transaction_id=${transactionId}` : ""
-  }`;
+  const url = `${API_BASE_URL}payment-page/ref/?ref_id=${pageId}${transactionId ? `&transaction_id=${transactionId}` : ""
+    }`;
 
   try {
     const response = await fetch(url, {
