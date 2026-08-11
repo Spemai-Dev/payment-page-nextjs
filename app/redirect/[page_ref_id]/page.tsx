@@ -19,35 +19,53 @@ export default async function RedirectPage({
 
   // Call verification API
   const res = await verifyTransaction(pageId, transactionId);
+  console.log(res, 'response')
 
-  if (!res || !res.status) {
+  if (!res) {
     redirect("/unauth");
   }
 
-  const statusCode = Number(res.status);
+  let isAttempted = false;
+  let paymentStatus = false;
+  let pageDataObj = null;
 
-  // Replicate original status checks:
-  // 172: checkout page (is_attempted = false, status = false)
-  // 173: successful transaction (is_attempted = true, status = true)
-  // 174: failed transaction (is_attempted = true, status = false)
-  const isAttempted = statusCode === 173 || statusCode === 174;
-  const paymentStatus = statusCode === 173;
+  if (res.success !== undefined) {
+    // New API envelope
+    if (!res.success || !res.data) {
+      redirect("/unauth");
+    }
+    pageDataObj = res.data.page_data;
+    if (res.data.transaction) {
+      isAttempted = true;
+      paymentStatus = res.data.transaction.status === true;
+    }
+  } else {
+    // Old API envelope fallback
+    if (!res.status || !res.data) {
+      redirect("/unauth");
+    }
+    pageDataObj = res.data.page_data;
+    const statusCode = Number(res.status);
+    isAttempted = statusCode === 173 || statusCode === 174;
+    paymentStatus = statusCode === 173;
+  }
 
-  const pageDataObj = res.data?.page_data;
   if (!pageDataObj) {
     redirect("/unauth");
   }
 
-  // Verify Sha integrity signature
-  const validateRequest = {
-    pp_id: pageDataObj.page_ref_id,
-    token: pageDataObj.token,
-  };
-
-  const isValidSignature = jsonToShaValidator(
-    validateRequest,
-    pageDataObj.request_hash
-  );
+  // Verify Sha integrity signature (skip if not present in new API)
+  let isValidSignature = true;
+  if (pageDataObj.request_hash && pageDataObj.token) {
+    const validateRequest = {
+      pp_id: pageDataObj.page_ref_id,
+      token: pageDataObj.token,
+    };
+    isValidSignature = jsonToShaValidator(
+      validateRequest,
+      pageDataObj.request_hash
+    );
+  }
 
   if (isValidSignature) {
     // Redirect to the merchant interface

@@ -13,7 +13,8 @@ import {
   FileText
 } from "lucide-react";
 import { requestPLTransaction } from "../lib/api";
-import { requestEncrypt, getJsonHash } from "../lib/encryption";
+import { getJsonHash } from "../lib/encryption";
+import { useOnePay } from "../hooks/useOnePay";
 
 interface MerchantPaymentClientProps {
   pageData: any;
@@ -33,8 +34,8 @@ export default function MerchantPaymentClient({
   // Extract variables
   const merchant = pageData.merchant_data || {};
   const pageInfo = pageData.page_data || {};
-  const items = pageData.page_item_data || [];
-  const additionalFields = pageData.page_additional_data || [];
+  const items = pageData.items || pageData.page_item_data || [];
+  const additionalFields = pageData.custom_fields || pageData.page_additional_data || [];
   const currency = pageInfo.currency || "LKR";
 
   // State variables
@@ -61,36 +62,115 @@ export default function MerchantPaymentClient({
   const [statusSuccess, setStatusSuccess] = useState(initialStatus);
   const [showTermsModal, setShowTermsModal] = useState(false);
 
-  // Initialize amount
+  const [currentTranId, setCurrentTranId] = useState(tran);
+
+  const pageRefId = String(pageInfo.page_ref_id || pageData.page_ref_id || "");
+
+  // OnePay SDK hook
+  const {
+    isInitialized: isSDKInitialized,
+    isProcessing: isSDKProcessing,
+    error: sdkError,
+    processPayment,
+    processDirectPayment,
+    paymentStatus,
+    paymentResult,
+    resetPaymentStatus,
+    appDetails,
+  } = useOnePay({
+    pageRefId: pageRefId,
+    appId: String(pageInfo.app_id || pageData.app_id || ""),
+    appRefId: String(pageInfo.app_ref_id || pageData.app_ref_id || ""),
+    appToken: pageInfo.token || pageData.token || "",
+    hashToken: pageInfo.token || pageData.token || "",
+    debug: true,
+  });
+
+  // Sync paymentStatus with UI modals
   useEffect(() => {
-    if (pageData.is_plain_text) {
-      if (pageData.amount && parseFloat(pageData.amount) > 0) {
-        setAmount(String(pageData.amount));
-      } else if (pageData.rest_amount && parseFloat(pageData.rest_amount) > 0) {
-        setAmount(String(pageData.rest_amount));
-      } else if (!pageData.required_amount) {
-        setAmount(String(pageInfo.net_amount || "0.00"));
-      } else {
-        setAmount("");
+    if (paymentStatus === "success") {
+      setLoading(false);
+      setStatusSuccess(true);
+      if (paymentResult?.transaction_id) {
+        setCurrentTranId(paymentResult.transaction_id);
       }
-    } else {
-      // For items list, set to sum of selected
-      const total = selectedItems.reduce(
-        (sum, item) => sum + parseFloat(item.amount || "0"),
-        0
-      );
+      setShowStatusModal(true);
+    } else if (paymentStatus === "failed") {
+      setLoading(false);
+      setStatusSuccess(false);
+      if (paymentResult?.transaction_id) {
+        setCurrentTranId(paymentResult.transaction_id);
+      }
+      setShowStatusModal(true);
+    } else if (paymentStatus === "closed") {
+      setLoading(false);
+      if (paymentResult?.transaction_id) {
+        setCurrentTranId(paymentResult.transaction_id);
+      }
+    }
+  }, [paymentStatus, paymentResult]);
+
+  // Console log API response for debugging
+  useEffect(() => {
+    console.log("Payment Page API Data:", pageData);
+  }, [pageData]);
+
+  // Helper function to safely parse boolean flags (handles 0, 1, "0", "1", true, false, "true", "false")
+  const parseBooleanFlag = (val: any): boolean => {
+    if (val === true || val === 1 || val === "1" || val === "true" || val === "True") {
+      return true;
+    }
+    if (val === false || val === 0 || val === "0" || val === "false" || val === "False") {
+      return false;
+    }
+    return false;
+  };
+
+  // Helper flags for payment page types
+  const rawPlainText = pageData.is_plain_text ?? pageInfo.is_plain_text;
+  const isPlainText = parseBooleanFlag(rawPlainText) || items.length === 0;
+
+  const rawReqAmount = pageData.required_amount ?? pageInfo.required_amount;
+  const isRequiredAmount = parseBooleanFlag(rawReqAmount);
+
+  // Initialize amount once on mount / page data load for Plain Text mode
+  useEffect(() => {
+    if (isPlainText) {
+      const fixedAmt =
+        pageData.net_amount ||
+        pageData.gross_amount ||
+        pageData.amount ||
+        pageData.rest_amount ||
+        pageInfo.net_amount ||
+        pageInfo.gross_amount ||
+        pageInfo.amount ||
+        "";
+      if (fixedAmt && parseFloat(String(fixedAmt)) > 0) {
+        setAmount(String(fixedAmt));
+      }
+    }
+  }, [isPlainText, pageData.net_amount, pageData.gross_amount, pageData.amount, pageData.rest_amount, pageInfo.net_amount, pageInfo.gross_amount, pageInfo.amount]);
+
+  // Recalculate amount dynamically when selected items change in Item List mode
+  useEffect(() => {
+    if (!isPlainText) {
+      const total = selectedItems.reduce((sum, item) => {
+        const itemAmt = parseFloat(item.amount || "0");
+        return sum + (isNaN(itemAmt) ? 0 : itemAmt);
+      }, 0);
       setAmount(total.toFixed(2));
     }
-  }, [selectedItems, pageData.is_plain_text, pageData.required_amount, pageInfo.net_amount, pageData.amount, pageData.rest_amount]);
+  }, [selectedItems, isPlainText]);
 
   // Handle item checkbox change
   const handleItemCheck = (choice: any, checked: boolean) => {
     if (checked) {
+      const netAmount = choice.net_amount !== undefined ? choice.net_amount : choice.collection_item_net_amount;
       setSelectedItems((prev) => [
         ...prev,
         {
           id: choice.id,
-          amount: choice.collection_item_net_amount,
+          amount: netAmount,
         },
       ]);
     } else {
@@ -160,69 +240,136 @@ export default function MerchantPaymentClient({
       }
     }
 
-    // If checkboxes are required
-    if (!pageData.is_plain_text && selectedItems.length === 0) {
+    // If checkboxes are required for Item List page
+    if (!isPlainText && selectedItems.length === 0) {
       return true;
     }
 
     return false;
   };
 
-  // Handle submit action
   const handleProceed = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isFormInvalid()) return;
+    console.log("Pay button clicked.");
+
+    // Mark all fields as touched to display errors
+    const allTouched: Record<string, boolean> = {
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      amount: true,
+    };
+    additionalFields.forEach((field: any) => {
+      if (field.field_name) {
+        allTouched[field.field_name] = true;
+      }
+    });
+    setTouched(allTouched);
+
+    const formInvalid = isFormInvalid();
+    console.log("Form Validation Check:", {
+      isInvalid: formInvalid,
+      firstName,
+      lastName,
+      email,
+      phone,
+      amount,
+      agreedToTerms,
+      isSDKInitialized,
+      isPlainText,
+      selectedItemsCount: selectedItems.length,
+    });
+
+    if (formInvalid) {
+      if (!agreedToTerms) {
+        alert("Please check the box to agree to the Terms & Conditions before proceeding.");
+      }
+      return;
+    }
+
+    if (!isSDKInitialized) {
+      alert("Payment system is still initializing. Please wait a moment and try again.");
+      return;
+    }
 
     setLoading(true);
-    setLoadingMessage("Processing your request...");
-
-    const itemIds = selectedItems.map((item) => item.id);
-
-    const requestBody: Record<string, any> = {
-      customer_first_name: firstName,
-      customer_last_name: lastName,
-      customer_email: email,
-      customer_phone_number: phone,
-      amount: parseFloat(amount),
-      page_ref_id: pageInfo.page_ref_id,
-      currency: currency,
-    };
-
-    if (!pageData.is_plain_text) {
-      requestBody.collection_items = itemIds;
-    }
-    if (additionalFields.length > 0) {
-      requestBody.additional_data = additionalData;
-    }
-
-    const hashPayload = {
-      page_ref_id: pageInfo.page_ref_id,
-      customer_phone_number: phone,
-    };
-
-    const hash = getJsonHash(hashPayload);
-    const encryptedBody = requestEncrypt(requestBody);
+    setLoadingMessage("Initiating payment gateway...");
 
     try {
-      const res = await requestPLTransaction(
-        hash,
-        encryptedBody,
-        pageInfo.token
-      );
+      let directSuccess = false;
+      const pageRefId = pageInfo.page_ref_id || pageData.page_ref_id || "";
+      const currentAppId = String(pageInfo.app_id || pageData.app_id || "");
 
-      if (res && res.status === 1000 && res.data?.redirect_url) {
-        // Redirect to safe payment processor
-        window.location.href = res.data.redirect_url;
-      } else {
-        setLoading(false);
-        setStatusSuccess(false);
-        setShowStatusModal(true);
+      // Build non-blank structured additional_data JSON object
+      const structuredAdditionalData = {
+        page_ref_id: pageRefId,
+        collection_item_ids: selectedItems.map((item) => item.id),
+        custom_field_answers: additionalFields.map((field: any) => ({
+          field_name: field.field_name,
+          value: additionalData[field.field_name] || "",
+        })),
+      };
+      const formattedAdditionalData = JSON.stringify(structuredAdditionalData);
+
+      if (pageInfo.token && pageRefId) {
+        try {
+          const requestBody = {
+            pp_id: pageRefId,
+            amount: parseFloat(amount),
+            customer_first_name: firstName,
+            customer_last_name: lastName,
+            customer_phone_number: phone,
+            customer_email: email,
+            additional_data: formattedAdditionalData,
+          };
+          const requestHash = getJsonHash(requestBody);
+          const plRes = await requestPLTransaction(requestHash, requestBody, pageInfo.token);
+          if (plRes && (plRes.status || plRes.success)) {
+            const resData = plRes.data || plRes;
+            const gatewayObj = resData.gateway || resData;
+            const redirectUrl = gatewayObj.redirect_url || resData.redirect_url || resData.url;
+            const tranId = gatewayObj.ipg_transaction_id || resData.ipg_transaction_id || resData.transaction_id;
+            if (redirectUrl && tranId) {
+              directSuccess = true;
+              setLoading(false);
+              await processDirectPayment({
+                directGatewayURL: redirectUrl,
+                directTransactionId: tranId,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("requestPLTransaction attempt failed, falling back to processPayment:", e);
+        }
       }
-    } catch (err) {
-      console.error(err);
+
+      if (!directSuccess) {
+        setLoading(false);
+        const paymentPayload = {
+          currency: currency,
+          amount: parseFloat(amount),
+          orderReference: pageRefId,
+          customerFirstName: firstName,
+          customerLastName: lastName,
+          customerPhoneNumber: phone,
+          customerEmail: email,
+          redirectUrl: window.location.origin + `/redirect/${pageRefId}`,
+          appid: currentAppId,
+          apptoken: pageInfo.token || pageData.token,
+          hashToken: pageInfo.token || pageData.token,
+          additionalData: formattedAdditionalData,
+        };
+        console.log("Submitting Payment Payload to OnePay SDK:", paymentPayload);
+        await processPayment(paymentPayload);
+      }
+    } catch (error) {
+      console.error("Payment processing error:", error);
       setLoading(false);
       setStatusSuccess(false);
       setShowStatusModal(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -296,7 +443,7 @@ export default function MerchantPaymentClient({
 
           <div className="px-8 py-8 flex flex-col gap-6 flex-grow">
             {/* Checklist items vs Plain-text block */}
-            {!pageData.is_plain_text ? (
+            {!isPlainText ? (
               <div className="space-y-4">
                 <div className="space-y-0.5">
                   <h2 className="text-[#0a2540] text-base font-bold">
@@ -312,6 +459,10 @@ export default function MerchantPaymentClient({
                   {items.map((choice: any, index: number) => {
                     const isChecked = selectedItems.some((item) => item.id === choice.id);
                     const isLast = index === items.length - 1;
+                    const netAmount = choice.net_amount !== undefined ? choice.net_amount : choice.collection_item_net_amount;
+                    const itemImage = (choice.images && choice.images[0]) || choice.collection_item_image;
+                    const itemName = choice.item_name || choice.collection_item_name;
+                    const itemDescription = choice.description || choice.collection_item_description;
                     return (
                       <React.Fragment key={choice.id || index}>
                         <div className="payment-item-row flex flex-col gap-4 p-2 rounded-xl">
@@ -332,11 +483,11 @@ export default function MerchantPaymentClient({
                             </div>
 
                             {/* Thumbnail image if exists */}
-                            {choice.collection_item_image && (
+                            {itemImage && (
                               <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-white flex items-center justify-center flex-shrink-0">
                                 <img
-                                  src={`${imageBaseUrl}${choice.collection_item_image}`}
-                                  alt={choice.collection_item_name}
+                                  src={itemImage.startsWith("http") ? itemImage : `${imageBaseUrl}${itemImage}`}
+                                  alt={itemName}
                                   className="w-full h-full object-cover"
                                 />
                               </div>
@@ -345,17 +496,17 @@ export default function MerchantPaymentClient({
                             {/* Title and descriptions */}
                             <div className="flex-1 space-y-1">
                               <h3 className="font-bold text-[#0a2540] text-sm leading-snug">
-                                {choice.collection_item_name}
+                                {itemName}
                               </h3>
                               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                                {choice.collection_item_description}
+                                {itemDescription}
                               </p>
                             </div>
 
                             {/* Pricing */}
                             <div className="text-right flex-shrink-0 pt-0.5">
                               <span className="text-sm font-bold text-emerald-600">
-                                {currency} {parseFloat(choice.collection_item_net_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                {currency} {parseFloat(netAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
@@ -381,7 +532,7 @@ export default function MerchantPaymentClient({
           <div>
             <div className="payment-amount-card">
               <span className="text-xl font-bold text-[#0a2540]">Payable amount</span>
-              {pageData.is_plain_text && pageData.required_amount ? (
+              {isPlainText && isRequiredAmount ? (
                 <div className="flex items-center gap-1.5 bg-white/60 px-3 py-1.5 rounded-lg border border-[#0a2540]/10 shadow-sm focus-within:border-[#0a2540]/30 transition-colors">
                   <span className="text-xl font-bold text-[#0a2540]/80">{currency}</span>
                   <input
@@ -553,8 +704,8 @@ export default function MerchantPaymentClient({
                 <div>
                   <button
                     type="submit"
-                    disabled={isFormInvalid() || loading}
-                    className="payment-btn-primary w-full"
+                    disabled={loading}
+                    className="payment-btn-primary w-full cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     <Lock className="h-4 w-4" />
                     Pay {currency} {parseFloat(amount || "0").toLocaleString("en-US", { minimumFractionDigits: 2 })}
@@ -622,10 +773,10 @@ export default function MerchantPaymentClient({
                     Your transaction has been processed successfully.
                   </p>
                 </div>
-                {tran && (
+                {currentTranId && (
                   <div className="w-full bg-slate-50 rounded-xl p-3 text-xs text-slate-500 font-bold border border-slate-100 flex justify-between">
                     <span>Reference ID:</span>
-                    <span className="font-mono text-slate-700">{tran}</span>
+                    <span className="font-mono text-slate-700">{currentTranId}</span>
                   </div>
                 )}
                 <button
@@ -646,10 +797,10 @@ export default function MerchantPaymentClient({
                     Your payment could not be processed. Please try again.
                   </p>
                 </div>
-                {tran && (
+                {currentTranId && (
                   <div className="w-full bg-slate-50 rounded-xl p-3 text-xs text-slate-500 font-bold border border-slate-100 flex justify-between">
                     <span>Reference ID:</span>
-                    <span className="font-mono text-slate-700">{tran}</span>
+                    <span className="font-mono text-slate-700">{currentTranId}</span>
                   </div>
                 )}
                 <button

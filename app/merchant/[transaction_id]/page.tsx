@@ -27,25 +27,39 @@ export default async function MerchantPage({
   // Fetch transaction data from backend (via GET call)
   const res = await verifyTransaction(pageId, tran);
 
-  if (!res || !res.status) {
+  if (!res) {
     redirect("/unauth");
   }
 
-  const pageDataObj = res.data?.page_data;
+  let pageDataObj = null;
+  if (res.success !== undefined) {
+    if (!res.success || !res.data) {
+      redirect("/unauth");
+    }
+    pageDataObj = res.data.page_data;
+  } else {
+    if (!res.status || !res.data) {
+      redirect("/unauth");
+    }
+    pageDataObj = res.data.page_data;
+  }
+
   if (!pageDataObj) {
     redirect("/unauth");
   }
 
-  // Re-verify request hash integrity
-  const validateRequest = {
-    pp_id: pageDataObj.page_ref_id,
-    token: pageDataObj.token,
-  };
-
-  const isValidSignature = jsonToShaValidator(
-    validateRequest,
-    pageDataObj.request_hash
-  );
+  // Re-verify request hash integrity (skip if not present in new API)
+  let isValidSignature = true;
+  if (pageDataObj.request_hash && pageDataObj.token) {
+    const validateRequest = {
+      pp_id: pageDataObj.page_ref_id,
+      token: pageDataObj.token,
+    };
+    isValidSignature = jsonToShaValidator(
+      validateRequest,
+      pageDataObj.request_hash
+    );
+  }
 
   if (!isValidSignature) {
     redirect("/unauth");
