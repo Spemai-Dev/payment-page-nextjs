@@ -10,9 +10,11 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  FileText
+  FileText,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
-import { requestPLTransaction } from "../lib/api";
+import { requestPLTransaction, createCheckoutIntent } from "../lib/api";
 import { getJsonHash } from "../lib/encryption";
 import { useOnePay } from "../hooks/useOnePay";
 
@@ -21,6 +23,123 @@ interface MerchantPaymentClientProps {
   tran: string;
   initialIsAttempted: boolean;
   initialStatus: boolean;
+}
+
+function ItemImageSlider({
+  images,
+  itemName,
+  imageBaseUrl,
+}: {
+  images: string[];
+  itemName: string;
+  imageBaseUrl: string;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Auto-play interval for multiple images
+  useEffect(() => {
+    if (!images || images.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [images]);
+
+  if (!images || images.length === 0) return null;
+
+  const currentImg = images[currentIndex] || images[0];
+  const fullUrl = currentImg.startsWith("http") ? currentImg : `${imageBaseUrl}${currentImg}`;
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  return (
+    <>
+      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-white group flex-shrink-0 shadow-sm flex items-center justify-center">
+        <img
+          src={fullUrl}
+          alt={`${itemName} ${currentIndex + 1}`}
+          className="w-full h-full object-cover cursor-pointer transition-transform duration-300 group-hover:scale-105"
+          onClick={() => setPreviewImage(fullUrl)}
+        />
+
+        {images.length > 1 && (
+          <>
+            {/* Slider Nav Buttons */}
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="absolute left-0.5 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 focus:outline-none"
+              title="Previous image"
+            >
+              <ChevronLeft className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 focus:outline-none"
+              title="Next image"
+            >
+              <ChevronRight className="w-3 h-3" />
+            </button>
+
+            {/* Dots Indicator */}
+            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 z-10 pointer-events-none">
+              {images.map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`h-1 rounded-full transition-all ${
+                    idx === currentIndex ? "w-2 bg-white" : "w-1 bg-white/60"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Lightbox Preview Modal */}
+      {previewImage && (
+        <div
+          className="premium-modal-backdrop z-50 p-4 flex items-center justify-center bg-black/80 backdrop-blur-md"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-xl max-h-[85vh] bg-white rounded-2xl overflow-hidden p-2 shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 bg-black/60 text-white rounded-full p-1.5 hover:bg-black/80 transition-colors z-20"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+            <img
+              src={previewImage}
+              alt={itemName}
+              className="w-full h-auto max-h-[75vh] object-contain rounded-xl"
+            />
+            <p className="mt-2 text-xs font-semibold text-slate-700 text-center px-4">
+              {itemName} ({currentIndex + 1} of {images.length})
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function MerchantPaymentClient({
@@ -61,6 +180,7 @@ export default function MerchantPaymentClient({
   const [showStatusModal, setShowStatusModal] = useState(initialIsAttempted);
   const [statusSuccess, setStatusSuccess] = useState(initialStatus);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const [currentTranId, setCurrentTranId] = useState(tran);
 
@@ -164,12 +284,14 @@ export default function MerchantPaymentClient({
 
   // Handle item checkbox change
   const handleItemCheck = (choice: any, checked: boolean) => {
+    const colItemId = choice.collection_item_id !== undefined ? choice.collection_item_id : choice.id;
     if (checked) {
       const netAmount = choice.net_amount !== undefined ? choice.net_amount : choice.collection_item_net_amount;
       setSelectedItems((prev) => [
         ...prev,
         {
           id: choice.id,
+          collection_item_id: colItemId,
           amount: netAmount,
         },
       ]);
@@ -293,24 +415,41 @@ export default function MerchantPaymentClient({
       return;
     }
 
+    setGeneralError(null);
     setLoading(true);
-    setLoadingMessage("Initiating payment gateway...");
+    setLoadingMessage("Registering checkout intent...");
 
     try {
       let directSuccess = false;
       const pageRefId = pageInfo.page_ref_id || pageData.page_ref_id || "";
       const currentAppId = String(pageInfo.app_id || pageData.app_id || "");
 
-      // Build non-blank structured additional_data JSON object
-      const structuredAdditionalData = {
-        page_ref_id: pageRefId,
-        collection_item_ids: selectedItems.map((item) => item.id),
+      // 1. Post Checkout Intent to register selections and obtain intent reference
+      const intentPayload = {
+        collection_item_ids: selectedItems.map((item) =>
+          item.collection_item_id !== undefined ? item.collection_item_id : item.id
+        ),
         custom_field_answers: additionalFields.map((field: any) => ({
           field_name: field.field_name,
           value: additionalData[field.field_name] || "",
         })),
       };
-      const formattedAdditionalData = JSON.stringify(structuredAdditionalData);
+
+      const intentResult = await createCheckoutIntent(pageRefId, intentPayload);
+      console.log("Checkout Intent API Result:", intentResult);
+
+      if (!intentResult.success || !intentResult.reference) {
+        const errorMsg = intentResult.error || "Failed to create checkout intent. Please verify your selections and try again.";
+        console.error("Checkout intent failed, stopping SDK payment process:", errorMsg);
+        setGeneralError(errorMsg);
+        setLoading(false);
+        return; // STOP EXECUTION! DO NOT CALL SDK!
+      }
+
+      const intentReference = intentResult.reference;
+      console.log("Checkout Intent Successful! Reference:", intentReference);
+
+      setLoadingMessage("Initiating payment gateway...");
 
       if (pageInfo.token && pageRefId) {
         try {
@@ -321,7 +460,7 @@ export default function MerchantPaymentClient({
             customer_last_name: lastName,
             customer_phone_number: phone,
             customer_email: email,
-            additional_data: formattedAdditionalData,
+            additional_data: intentReference,
           };
           const requestHash = getJsonHash(requestBody);
           const plRes = await requestPLTransaction(requestHash, requestBody, pageInfo.token);
@@ -358,16 +497,15 @@ export default function MerchantPaymentClient({
           appid: currentAppId,
           apptoken: pageInfo.token || pageData.token,
           hashToken: pageInfo.token || pageData.token,
-          additionalData: formattedAdditionalData,
+          additionalData: intentReference,
         };
         console.log("Submitting Payment Payload to OnePay SDK:", paymentPayload);
         await processPayment(paymentPayload);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Payment processing error:", error);
       setLoading(false);
-      setStatusSuccess(false);
-      setShowStatusModal(true);
+      setGeneralError(error?.message || "An unexpected error occurred while processing payment.");
     } finally {
       setLoading(false);
     }
@@ -460,7 +598,12 @@ export default function MerchantPaymentClient({
                     const isChecked = selectedItems.some((item) => item.id === choice.id);
                     const isLast = index === items.length - 1;
                     const netAmount = choice.net_amount !== undefined ? choice.net_amount : choice.collection_item_net_amount;
-                    const itemImage = (choice.images && choice.images[0]) || choice.collection_item_image;
+                    const itemImages: string[] =
+                      Array.isArray(choice.images) && choice.images.length > 0
+                        ? choice.images
+                        : choice.collection_item_image
+                        ? [choice.collection_item_image]
+                        : [];
                     const itemName = choice.item_name || choice.collection_item_name;
                     const itemDescription = choice.description || choice.collection_item_description;
                     return (
@@ -482,16 +625,12 @@ export default function MerchantPaymentClient({
                               </label>
                             </div>
 
-                            {/* Thumbnail image if exists */}
-                            {itemImage && (
-                              <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-white flex items-center justify-center flex-shrink-0">
-                                <img
-                                  src={itemImage.startsWith("http") ? itemImage : `${imageBaseUrl}${itemImage}`}
-                                  alt={itemName}
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            )}
+                            {/* Image Slider / Thumbnail */}
+                            <ItemImageSlider
+                              images={itemImages}
+                              itemName={itemName}
+                              imageBaseUrl={imageBaseUrl}
+                            />
 
                             {/* Title and descriptions */}
                             <div className="flex-1 space-y-1">
@@ -559,6 +698,12 @@ export default function MerchantPaymentClient({
 
           {/* Form Fields Section */}
           <div className="space-y-5">
+            {(generalError || sdkError) && (
+              <div className="p-4 mb-2 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold flex items-center gap-3">
+                <XCircle className="w-5 h-5 flex-shrink-0 text-red-500" />
+                <span>{generalError || sdkError}</span>
+              </div>
+            )}
             <form onSubmit={handleProceed} className="space-y-4">
 
               {/* First Name & Last Name */}
@@ -704,8 +849,8 @@ export default function MerchantPaymentClient({
                 <div>
                   <button
                     type="submit"
-                    disabled={loading}
-                    className="payment-btn-primary w-full cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={loading || isFormInvalid()}
+                    className="payment-btn-primary w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Lock className="h-4 w-4" />
                     Pay {currency} {parseFloat(amount || "0").toLocaleString("en-US", { minimumFractionDigits: 2 })}

@@ -100,3 +100,43 @@ export async function requestPLTransaction(
     }
   }
 }
+
+export async function createCheckoutIntent(
+  pageRefId: string,
+  payload: { collection_item_ids?: any[]; custom_field_answers?: any[] }
+): Promise<{ success: boolean; reference?: string; error?: string }> {
+  const primaryUrl = `${cleanBaseUrl}/v1/client/payment-pages/${pageRefId}/checkout-intent`;
+
+  try {
+    console.log("Posting Checkout Intent to URL:", primaryUrl, payload);
+    const response = await fetch(primaryUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const resJson = await response.json().catch(() => null);
+    console.log("Checkout Intent API Response:", resJson);
+
+    if (!response.ok) {
+      const errMsg = resJson?.error || resJson?.message || `Checkout intent failed with status ${response.status}`;
+      return { success: false, error: errMsg };
+    }
+
+    if (resJson && (resJson.success || resJson.status === 200 || resJson.status === 201)) {
+      const dataObj = resJson.data || resJson;
+      const ref = dataObj.reference || resJson.reference;
+      if (ref) {
+        return { success: true, reference: ref };
+      }
+    }
+
+    const errorDetail = resJson?.error || resJson?.message || "Failed to obtain checkout intent reference";
+    return { success: false, error: errorDetail };
+  } catch (error: any) {
+    console.warn("createCheckoutIntent failed:", error);
+    return { success: false, error: error?.message || "Network error while creating checkout intent" };
+  }
+}
