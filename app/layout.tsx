@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import "./custom.css";
 
+const defaultAppUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "https://ambitious-smoke-05a89ee00.7.azurestaticapps.net";
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://pay.onepay.lk"),
+  metadataBase: new URL(defaultAppUrl),
   title: "OnePay Payment Page",
   description: "Pay securely via OnePay Gateway",
 };

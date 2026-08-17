@@ -20,12 +20,18 @@ export async function generateMetadata({
   const resolvedParams = await params;
   const pageId = resolvedParams.transaction_id;
 
+  const defaultAppUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://ambitious-smoke-05a89ee00.7.azurestaticapps.net";
+  const cleanAppUrl = defaultAppUrl.replace(/\/+$/, "");
+
   const defaultTitle = "OnePay Payment Page";
   const defaultDesc = "Complete your payment securely via OnePay Gateway.";
-  const defaultImage = "https://pay.onepay.lk/assets/OnepayPayment.png";
+  const defaultImage = `${cleanAppUrl}/assets/OnepayPayment.png`;
 
   if (!pageId) {
     return {
+      metadataBase: new URL(cleanAppUrl),
       title: defaultTitle,
       description: defaultDesc,
     };
@@ -44,18 +50,23 @@ export async function generateMetadata({
       : `Pay ${pageInfo.currency || "LKR"} ${pageInfo.net_amount || pageInfo.gross_amount || ""} securely via ${merchantInfo.merchant_name || "OnePay"}.`;
 
   let coverImage = pageInfo.cover_image || merchantInfo.merchant_logo || defaultImage;
-  if (coverImage && !coverImage.startsWith("http")) {
+  if (coverImage && !coverImage.startsWith("http://") && !coverImage.startsWith("https://")) {
     coverImage = `https://onepayserviceimages.s3.amazonaws.com/${coverImage.replace(/^\/+/, "")}`;
   }
 
-  const isPng = coverImage.toLowerCase().endsWith(".png");
-  const isJpeg = coverImage.toLowerCase().endsWith(".jpg") || coverImage.toLowerCase().endsWith(".jpeg");
-  const imageType = isPng ? "image/png" : isJpeg ? "image/jpeg" : "image/png";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://pay.onepay.lk";
-  const pageUrl = `${appUrl.replace(/\/+$/, "")}/merchant/${pageId}`;
+  if (coverImage.startsWith("http://")) {
+    coverImage = coverImage.replace("http://", "https://");
+  }
+
+  const isPng = coverImage.toLowerCase().includes(".png");
+  const isJpeg = coverImage.toLowerCase().includes(".jpg") || coverImage.toLowerCase().includes(".jpeg");
+  const isWebp = coverImage.toLowerCase().includes(".webp");
+  const imageType = isPng ? "image/png" : isJpeg ? "image/jpeg" : isWebp ? "image/webp" : "image/png";
+
+  const pageUrl = `${cleanAppUrl}/merchant/${pageId}`;
 
   return {
-    metadataBase: new URL(appUrl),
+    metadataBase: new URL(cleanAppUrl),
     title: pageName,
     description: pageDesc,
     openGraph: {
@@ -92,10 +103,14 @@ export async function generateMetadata({
       site: "@onepay",
     },
     other: {
+      "og:image": coverImage,
+      "og:image:url": coverImage,
       "og:image:secure_url": coverImage,
       "og:image:type": imageType,
       "og:image:width": "1200",
       "og:image:height": "630",
+      "twitter:image": coverImage,
+      "twitter:image:src": coverImage,
     },
   };
 }
