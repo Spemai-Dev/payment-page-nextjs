@@ -3,6 +3,8 @@ import { verifyTransaction } from "../../../src/lib/api";
 import { jsonToShaValidator } from "../../../src/lib/encryption";
 import MerchantPaymentClient from "../../../src/components/MerchantPaymentClient";
 
+import type { Metadata } from "next";
+
 interface MerchantPageProps {
   params: Promise<{ transaction_id: string }>;
   searchParams: Promise<{
@@ -10,6 +12,47 @@ interface MerchantPageProps {
     is_attempted?: string;
     status?: string;
   }>;
+}
+
+export async function generateMetadata({
+  params,
+}: MerchantPageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const pageId = resolvedParams.transaction_id;
+
+  if (!pageId) {
+    return { title: "Payment Page | OnePay" };
+  }
+
+  const res = await verifyTransaction(pageId);
+  const data = res?.data || {};
+  const pageInfo = data.page_data || {};
+  const merchantInfo = data.merchant_data || {};
+
+  const pageName = pageInfo.page_name || merchantInfo.merchant_name || "Payment Request";
+  const pageDesc =
+    pageInfo.description && pageInfo.description.trim() !== ""
+      ? pageInfo.description.replace(/<[^>]*>?/gm, "").substring(0, 160)
+      : `Pay ${pageInfo.currency || "LKR"} ${pageInfo.net_amount || pageInfo.gross_amount || ""} securely via OnePay.`;
+
+  const coverImage = pageInfo.cover_image || merchantInfo.merchant_logo || "";
+
+  return {
+    title: pageName,
+    description: pageDesc,
+    openGraph: {
+      title: pageName,
+      description: pageDesc,
+      images: coverImage ? [{ url: coverImage }] : [],
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: pageName,
+      description: pageDesc,
+      images: coverImage ? [coverImage] : [],
+    },
+  };
 }
 
 export default async function MerchantPage({
