@@ -15,8 +15,15 @@ export async function generateMetadata({
   const resolvedParams = await params;
   const pageId = resolvedParams.page_ref_id;
 
+  const defaultTitle = "OnePay Payment Page";
+  const defaultDesc = "Complete your payment securely via OnePay Gateway.";
+  const defaultImage = "https://pay.onepay.lk/assets/OnepayPayment.png";
+
   if (!pageId) {
-    return { title: "Payment Page | OnePay" };
+    return {
+      title: defaultTitle,
+      description: defaultDesc,
+    };
   }
 
   const res = await verifyTransaction(pageId);
@@ -24,28 +31,66 @@ export async function generateMetadata({
   const pageInfo = data.page_data || {};
   const merchantInfo = data.merchant_data || {};
 
-  const pageName = pageInfo.page_name || merchantInfo.merchant_name || "Payment Request";
+  const pageName = pageInfo.page_name || merchantInfo.merchant_name || defaultTitle;
+  const rawDesc = pageInfo.description || "";
   const pageDesc =
-    pageInfo.description && pageInfo.description.trim() !== ""
-      ? pageInfo.description.replace(/<[^>]*>?/gm, "").substring(0, 160)
-      : `Pay ${pageInfo.currency || "LKR"} ${pageInfo.net_amount || pageInfo.gross_amount || ""} securely via OnePay.`;
+    rawDesc && rawDesc.trim() !== ""
+      ? rawDesc.replace(/<[^>]*>?/gm, "").substring(0, 160)
+      : `Pay ${pageInfo.currency || "LKR"} ${pageInfo.net_amount || pageInfo.gross_amount || ""} securely via ${merchantInfo.merchant_name || "OnePay"}.`;
 
-  const coverImage = pageInfo.cover_image || merchantInfo.merchant_logo || "";
+  let coverImage = pageInfo.cover_image || merchantInfo.merchant_logo || defaultImage;
+  if (coverImage && !coverImage.startsWith("http")) {
+    coverImage = `https://onepayserviceimages.s3.amazonaws.com/${coverImage.replace(/^\/+/, "")}`;
+  }
+
+  const isPng = coverImage.toLowerCase().endsWith(".png");
+  const isJpeg = coverImage.toLowerCase().endsWith(".jpg") || coverImage.toLowerCase().endsWith(".jpeg");
+  const imageType = isPng ? "image/png" : isJpeg ? "image/jpeg" : "image/png";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://pay.onepay.lk";
+  const pageUrl = `${appUrl.replace(/\/+$/, "")}/redirect/${pageId}`;
 
   return {
+    metadataBase: new URL(appUrl),
     title: pageName,
     description: pageDesc,
     openGraph: {
       title: pageName,
       description: pageDesc,
-      images: coverImage ? [{ url: coverImage }] : [],
+      url: pageUrl,
+      siteName: "OnePay Payment Gateway",
+      images: [
+        {
+          url: coverImage,
+          secureUrl: coverImage,
+          width: 1200,
+          height: 630,
+          alt: pageName,
+          type: imageType,
+        },
+        {
+          url: coverImage,
+          secureUrl: coverImage,
+          width: 600,
+          height: 315,
+          alt: pageName,
+          type: imageType,
+        },
+      ],
+      locale: "en_US",
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
       title: pageName,
       description: pageDesc,
-      images: coverImage ? [coverImage] : [],
+      images: [coverImage],
+      site: "@onepay",
+    },
+    other: {
+      "og:image:secure_url": coverImage,
+      "og:image:type": imageType,
+      "og:image:width": "1200",
+      "og:image:height": "630",
     },
   };
 }
