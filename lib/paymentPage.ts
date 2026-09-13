@@ -39,6 +39,7 @@ function mapItems(items: PaymentPageApiItem[] | undefined, fallbackCurrency: str
 
       return {
         id: item.id,
+        collectionItemId: Number(item.collection_item_id) || 0,
         name: sanitizeText(item.item_name, 120) || 'Item',
         description: sanitizeText(item.description, 240),
         image,
@@ -72,6 +73,7 @@ function mapPage(pageRef: string, data: PaymentPageApiData): CheckoutPage {
 
   return {
     pageRef: sanitizeText(pageData.page_ref_id || pageRef, 64),
+    appId: sanitizeText(String(pageData.app_ref_id || pageData.app_id || ''), 64),
     pageName: sanitizeText(pageData.page_name, 160) || 'Payment',
     description: sanitizeText(pageData.description, 2000),
     coverImage: sanitizeImageUrl(pageData.cover_image),
@@ -165,3 +167,49 @@ export const getPublicPaymentPage = cache(async function getPublicPaymentPage(
     return { ok: false, status: 502, message: GENERIC_ERROR };
   }
 });
+
+export async function createCheckoutIntent(
+  pageRef: string,
+  body: {
+    collectionItemIds: number[];
+    customFieldAnswers: { field_name: string; value: string }[];
+  },
+): Promise<{ ok: true; reference: string } | { ok: false; message: string }> {
+  if (!isValidPageRef(pageRef)) {
+    return { ok: false, message: 'payment page not found' };
+  }
+
+  if (!(rateLimitAllow(await clientKey()))) {
+    return { ok: false, message: 'Too many requests. Please try again shortly.' };
+  }
+
+  try {
+    const response = await fetch(
+      `${getPaymentPageApiBaseUrl()}/v1/client/payment-pages/${encodeURIComponent(pageRef)}/checkout-intent`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          collection_item_ids: body.collectionItemIds,
+          custom_field_answers: body.customFieldAnswers,
+        }),
+        cache: 'no-store',
+        redirect: 'error',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      },
+    );
+
+    const payload = (await response.json()) as ApiEnvelope<{ reference?: string }>;
+    const reference = sanitizeText(payload?.data?.reference, 128);
+    if (!response.ok || !payload?.success || !reference) {
+      return {
+        ok: false,
+        message: sanitizeText(payload?.message, 160) || 'Unable to start this payment right now.',
+      };
+    }
+
+    return { ok: true, reference };
+  } catch {
+    return { ok: false, message: GENERIC_ERROR };
+  }
+}

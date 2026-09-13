@@ -3,16 +3,17 @@ import { NextResponse, type NextRequest } from 'next/server';
 function buildCsp(nonce: string) {
   const scriptSrc =
     process.env.NODE_ENV === 'production'
-      ? `'self' 'nonce-${nonce}' 'strict-dynamic'`
-      : `'self' 'unsafe-eval' 'unsafe-inline'`;
+      ? `'self' 'nonce-${nonce}' https://www.gstatic.com`
+      : `'self' 'unsafe-eval' 'unsafe-inline' https://www.gstatic.com`;
 
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://onepay.blob.core.windows.net https://*.blob.core.windows.net https://cdn.onepay.lk https://files.onepayapi.lk",
+    "img-src 'self' data: blob: https://onepay.blob.core.windows.net https://*.blob.core.windows.net https://cdn.onepay.lk https://files.onepayapi.lk https://storage.googleapis.com",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://api.onepay.lk https://*.onepay.lk https://*.onepayapi.lk https://*.azurewebsites.net https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.googleapis.com wss://*.firebaseio.com",
+    "frame-src https: 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

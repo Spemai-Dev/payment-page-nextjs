@@ -43,6 +43,7 @@ export type PaymentPageApiData = {
   page_data?: {
     id?: number;
     app_id?: string | number;
+    app_ref_id?: string;
     page_name?: string;
     page_ref_id?: string;
     cover_image?: string;
@@ -66,6 +67,7 @@ export type PaymentPageApiData = {
 
 export type CheckoutItem = {
   id: number;
+  collectionItemId: number;
   name: string;
   description: string;
   image: string | null;
@@ -99,6 +101,7 @@ export type CheckoutTransaction = {
 
 export type CheckoutPage = {
   pageRef: string;
+  appId: string;
   pageName: string;
   description: string;
   coverImage: string | null;

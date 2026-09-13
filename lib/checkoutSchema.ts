@@ -13,8 +13,13 @@ export const checkoutInputSchema = z.object({
   firstName: nameSchema,
   lastName: nameSchema,
   email: z.string().trim().email().max(254),
-  countryCode: z.string().regex(/^\+\d{1,4}$/),
-  phone: z.string().trim().regex(/^\d{7,15}$/, 'Enter a valid phone number'),
+  countryCode: z.string().optional().default(''),
+  phone: z
+    .string()
+    .trim()
+    .min(6, 'Enter a valid phone number')
+    .max(20)
+    .regex(/^[+\d][\d\s\-()]{5,19}$/, 'Enter a valid phone number'),
   note: z.string().trim().max(200).optional().default(''),
   acceptedTerms: z.literal(true),
   selectedItemIds: z.array(z.number().int().positive()).max(50).default([]),

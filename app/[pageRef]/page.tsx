@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import PaymentCheckout from '@/components/checkout/PaymentCheckout';
-import { getSupportUrl } from '@/lib/env';
 import { getPublicPaymentPage } from '@/lib/paymentPage';
 import { isValidPageRef } from '@/lib/pageRef';
 
@@ -42,5 +41,5 @@ export default async function PublicPaymentPage({ params, searchParams }: PagePr
     throw new Error(result.message);
   }
 
-  return <PaymentCheckout page={result.page} supportUrl={getSupportUrl()} />;
+  return <PaymentCheckout page={result.page} />;
 }

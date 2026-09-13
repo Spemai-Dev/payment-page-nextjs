@@ -2,44 +2,33 @@
 
 import { useMemo, useState } from 'react';
 import {
-  CheckCircle2,
-  CreditCard,
+  Check,
   FileText,
-  HelpCircle,
   Lock,
   Mail,
   Package,
   Phone,
-  ShieldCheck,
   ShoppingCart,
   User,
+  X,
+  XCircle,
 } from 'lucide-react';
 import { preparePayment } from '@/lib/actions/preparePayment';
 import { getCheckoutPresentation } from '@/lib/checkoutPresentation';
 import { formatMoney } from '@/lib/money';
 import type { CheckoutPage } from '@/lib/types';
+import { useOnePay } from '@/hooks/useOnePay';
 import SafeImage from './SafeImage';
-
-const COUNTRY_CODES = [
-  { code: 'LK', dial: '+94', flag: '🇱🇰' },
-  { code: 'IN', dial: '+91', flag: '🇮🇳' },
-  { code: 'AE', dial: '+971', flag: '🇦🇪' },
-  { code: 'SG', dial: '+65', flag: '🇸🇬' },
-  { code: 'GB', dial: '+44', flag: '🇬🇧' },
-  { code: 'US', dial: '+1', flag: '🇺🇸' },
-];
 
 type PaymentCheckoutProps = {
   page: CheckoutPage;
-  supportUrl: string;
 };
 
-export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutProps) {
+export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [countryCode, setCountryCode] = useState('+94');
   const [phone, setPhone] = useState('');
   const [note, setNote] = useState('');
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
@@ -47,6 +36,17 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
   const [showTerms, setShowTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+  const [paidAmount, setPaidAmount] = useState(page.transaction?.amount || 0);
+
+  const {
+    isInitialized,
+    isLoading: sdkLoading,
+    isProcessing,
+    error: sdkError,
+    processPayment,
+    paymentStatus,
+    resetPaymentStatus,
+  } = useOnePay({ appId: page.appId });
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedItems = useMemo(
@@ -62,6 +62,9 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
     : page.netAmount;
 
   const payLabel = formatMoney(page.currency, payable);
+  const showSuccess = paymentStatus === 'success';
+  const showFailed = paymentStatus === 'failed';
+  const showResult = showSuccess || showFailed;
   const canPay =
     payable > 0 &&
     acceptedTerms &&
@@ -70,8 +73,15 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
     email.trim() &&
     phone.trim() &&
     !page.isExpired &&
-    !page.transaction?.status &&
-    !submitting;
+    !submitting &&
+    !isProcessing &&
+    isInitialized &&
+    !sdkLoading &&
+    !showResult;
+
+  function closeResult() {
+    resetPaymentStatus();
+  }
 
   function toggleItem(id: number) {
     setSelectedIds((current) =>
@@ -88,7 +98,6 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
         firstName,
         lastName,
         email,
-        countryCode,
         phone,
         note,
         acceptedTerms: true,
@@ -101,15 +110,30 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
         return;
       }
 
-      setFeedback({
-        type: 'success',
-        text: `Details verified for ${formatMoney(result.currency, result.amount)}. Payment gateway handover will be connected next.`,
+      setPaidAmount(result.amount);
+      await processPayment({
+        amount: result.amount,
+        currency: result.currency,
+        orderReference: result.orderReference,
+        customerFirstName: firstName.trim(),
+        customerLastName: lastName.trim(),
+        customerEmail: email.trim(),
+        customerPhoneNumber: phone.trim(),
+        redirectUrl: window.location.href,
+        additionalData: result.additionalData,
       });
     } catch {
       setFeedback({ type: 'error', text: 'Unable to start this payment right now.' });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function payButtonLabel() {
+    if (submitting) return 'Verifying…';
+    if (isProcessing) return 'Opening payment…';
+    if (sdkLoading || !isInitialized) return 'Preparing payment…';
+    return `Pay ${payLabel}`;
   }
 
   return (
@@ -132,16 +156,16 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
           </div>
           {/* Local brand mark; next/image is unnecessary for this tiny static asset. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/onepay-pg-logo.png" alt="OnePay Payment Gateway" className="pp-brand" />
+          <img src="/assets/main_logo.png" alt="OnePay" className="pp-brand" />
         </div>
       </header>
 
       <div className="pp">
 
-      {page.transaction ? (
+      {page.transaction && paymentStatus === 'idle' ? (
         <div className={`pp-banner ${page.transaction.status ? 'is-success' : 'is-error'}`}>
           {page.transaction.status
-            ? `Payment received: ${formatMoney(page.transaction.currency, page.transaction.amount)}`
+            ? `Last payment received: ${formatMoney(page.transaction.currency, page.transaction.amount)}`
             : page.transaction.failureReason || 'This payment attempt was not completed.'}
         </div>
       ) : null}
@@ -191,6 +215,7 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleItem(item.id)}
+                          disabled={isProcessing || submitting}
                         />
                         <span className="pp-item__thumb">
                           <SafeImage
@@ -278,24 +303,14 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
             </label>
             <label>
               <span className="pp-caption">Contact Number <b className="pp-req">*</b></span>
-              <span className="pp-input pp-phone">
+              <span className="pp-input">
                 <Phone size={16} />
-                <span className="pp-phone__flag" aria-hidden>
-                  {COUNTRY_CODES.find((country) => country.dial === countryCode)?.flag || '🇱🇰'}
-                </span>
-                <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} aria-label="Country code">
-                  {COUNTRY_CODES.map((country) => (
-                    <option key={country.code} value={country.dial}>
-                      {country.flag} {country.dial}
-                    </option>
-                  ))}
-                </select>
                 <input
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 15))}
-                  placeholder="71 234 5678"
-                  inputMode="numeric"
-                  autoComplete="tel-national"
+                  onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+                  placeholder="Enter contact number"
+                  inputMode="tel"
+                  autoComplete="tel"
                 />
               </span>
             </label>
@@ -349,49 +364,9 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
 
           <button className="pp-pay" type="button" disabled={!canPay} onClick={onPay}>
             <Lock size={16} />
-            {submitting ? 'Verifying…' : `Pay ${payLabel}`}
+            {payButtonLabel()}
             <span aria-hidden>→</span>
           </button>
-
-          <div className="pp-pay-alt">
-            <p>or pay with</p>
-            <div className="pp-brands" aria-label="Accepted cards">
-              <img src="/assets/cards/visa.svg" alt="Visa" />
-              <img src="/assets/cards/mastercard.svg" alt="Mastercard" />
-              <img src="/assets/cards/amex.svg" alt="American Express" />
-              <img src="/assets/cards/jcb.svg" alt="JCB" />
-            </div>
-          </div>
-
-          <div className="pp-trust">
-            <div>
-              <span className="pp-trust__icon" aria-hidden>
-                <ShieldCheck size={18} />
-              </span>
-              <div>
-                <strong>Secure & Encrypted</strong>
-                <p>256-bit SSL protection</p>
-              </div>
-            </div>
-            <div>
-              <span className="pp-trust__icon" aria-hidden>
-                <CheckCircle2 size={18} />
-              </span>
-              <div>
-                <strong>Trusted by thousands</strong>
-                <p>Safe. Simple. Reliable.</p>
-              </div>
-            </div>
-            <div>
-              <span className="pp-trust__icon" aria-hidden>
-                <CreditCard size={18} />
-              </span>
-              <div>
-                <strong>Multiple payment methods</strong>
-                <p>Cards, wallets & more</p>
-              </div>
-            </div>
-          </div>
         </section>
       </div>
 
@@ -399,9 +374,6 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
         <p>
           Powered by <strong>OnePay</strong> | Secure. Simple. Reliable.
         </p>
-        <a href={supportUrl} rel="noopener noreferrer">
-          <HelpCircle size={14} /> Need help? Contact support
-        </a>
       </footer>
 
       {showTerms ? (
@@ -416,6 +388,49 @@ export default function PaymentCheckout({ page, supportUrl }: PaymentCheckoutPro
             <button type="button" onClick={() => setShowTerms(false)}>
               Close
             </button>
+          </div>
+        </dialog>
+      ) : null}
+
+      {showResult ? (
+        <dialog
+          className="pp-modal"
+          open
+          onCancel={closeResult}
+          aria-labelledby="payment-result-title"
+        >
+          <div className={`pp-modal__card pp-result-card ${showFailed ? 'is-error' : 'is-success'}`}>
+            <button type="button" className="pp-result__close" onClick={closeResult} aria-label="Close">
+              <X size={16} strokeWidth={2.4} />
+            </button>
+            <div className="pp-result">
+              {showSuccess ? (
+                <div className="pp-result__burst" aria-hidden>
+                  <span /><span /><span /><span /><span /><span />
+                  <div className="pp-result__badge is-success">
+                    <Check size={34} strokeWidth={3.2} />
+                  </div>
+                </div>
+              ) : (
+                <div className="pp-result__burst" aria-hidden>
+                  <div className="pp-result__badge is-error">
+                    <XCircle size={34} strokeWidth={2.4} />
+                  </div>
+                </div>
+              )}
+              <h2 id="payment-result-title">{showSuccess ? 'Payment completed' : 'Payment failed'}</h2>
+              <p className={`pp-result__amount ${showFailed ? 'is-error' : ''}`}>
+                {formatMoney(page.currency, paidAmount || payable)}
+              </p>
+              <p className="pp-result__copy">
+                {showSuccess
+                  ? 'Thank you! Your payment has been successfully processed.'
+                  : sdkError || 'Your payment could not be processed. Please check your details and try again.'}
+              </p>
+              <button className="pp-result__cta" type="button" onClick={closeResult}>
+                {showSuccess ? 'Close' : 'Try again'}
+              </button>
+            </div>
           </div>
         </dialog>
       ) : null}

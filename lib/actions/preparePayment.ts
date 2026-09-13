@@ -1,7 +1,7 @@
 'use server';
 
 import { checkoutInputSchema } from '@/lib/checkoutSchema';
-import { getPublicPaymentPage } from '@/lib/paymentPage';
+import { createCheckoutIntent, getPublicPaymentPage } from '@/lib/paymentPage';
 import { sanitizeText } from '@/lib/sanitize';
 
 export type PreparePaymentResult =
@@ -10,6 +10,9 @@ export type PreparePaymentResult =
       amount: number;
       currency: string;
       selectedCount: number;
+      appId: string;
+      orderReference: string;
+      additionalData: string;
     }
   | {
       ok: false;
@@ -32,8 +35,8 @@ export async function preparePayment(input: unknown): Promise<PreparePaymentResu
     return { ok: false, message: 'This payment page has expired.' };
   }
 
-  if (page.transaction?.status) {
-    return { ok: false, message: 'This payment has already been completed.' };
+  if (!page.appId) {
+    return { ok: false, message: 'This payment page is missing a gateway application.' };
   }
 
   const requestedIds = new Set(parsed.data.selectedItemIds);
@@ -47,6 +50,7 @@ export async function preparePayment(input: unknown): Promise<PreparePaymentResu
     return { ok: false, message: page.items.length ? 'Select at least one item to pay.' : 'A payable amount is not available.' };
   }
 
+  const customFieldAnswers: { field_name: string; value: string }[] = [];
   for (const field of page.customFields) {
     const value = sanitizeText(parsed.data.customValues[String(field.id)], 200);
     if (!value) {
@@ -55,6 +59,21 @@ export async function preparePayment(input: unknown): Promise<PreparePaymentResu
     if (field.type === 'number' && !/^\d+(\.\d+)?$/.test(value)) {
       return { ok: false, message: `${field.name} must be a number.` };
     }
+    customFieldAnswers.push({ field_name: field.name, value });
+  }
+
+  const note = sanitizeText(parsed.data.note, 200);
+  if (note) {
+    customFieldAnswers.push({ field_name: 'Note', value: note });
+  }
+
+  const intent = await createCheckoutIntent(page.pageRef, {
+    collectionItemIds: selected.map((item) => item.collectionItemId).filter((id) => id > 0),
+    customFieldAnswers,
+  });
+
+  if (!intent.ok) {
+    return { ok: false, message: intent.message };
   }
 
   return {
@@ -62,5 +81,8 @@ export async function preparePayment(input: unknown): Promise<PreparePaymentResu
     amount: Number(amount.toFixed(2)),
     currency: page.currency,
     selectedCount: selected.length,
+    appId: page.appId,
+    orderReference: page.pageRef,
+    additionalData: intent.reference,
   };
 }
