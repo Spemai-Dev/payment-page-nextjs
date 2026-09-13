@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '*.blob.core.windows.net' },
       { protocol: 'https', hostname: 'cdn.onepay.lk' },
       { protocol: 'https', hostname: 'files.onepayapi.lk' },
+      { protocol: 'https', hostname: 'storage.googleapis.com' },
     ],
   },
   async headers() {

@@ -71,6 +71,7 @@ export type CheckoutItem = {
   name: string;
   description: string;
   image: string | null;
+  images: string[];
   currency: string;
   grossAmount: number;
   discountAmount: number;

@@ -14,3 +14,11 @@ export function getPaymentPageApiBaseUrl(): string {
 export function getSupportUrl(): string {
   return (process.env.SUPPORT_URL || 'https://onepay.lk').trim();
 }
+
+export function getOnePayFilesBaseUrl(): string {
+  return (process.env.ONEPAY_FILES_BASE_URL || 'https://files.onepayapi.lk').trim().replace(/\/+$/, '');
+}
+
+export function getOnePayFilesApiKey(): string {
+  return (process.env.ONEPAY_FILES_API_KEY || '').trim();
+}

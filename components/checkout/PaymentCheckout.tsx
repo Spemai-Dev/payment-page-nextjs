@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Check,
   FileText,
   Lock,
   Mail,
@@ -16,13 +15,30 @@ import {
 import { preparePayment } from '@/lib/actions/preparePayment';
 import { getCheckoutPresentation } from '@/lib/checkoutPresentation';
 import { formatMoney } from '@/lib/money';
-import type { CheckoutPage } from '@/lib/types';
 import { useOnePay } from '@/hooks/useOnePay';
 import SafeImage from './SafeImage';
+import ItemPreviewModal from './ItemPreviewModal';
+import type { CheckoutItem, CheckoutPage } from '@/lib/types';
 
 type PaymentCheckoutProps = {
   page: CheckoutPage;
 };
+
+function merchantInitials(name: string) {
+  const words = (name || '')
+    .replace(/[^a-zA-Z ]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length > 1) {
+    return words
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join('')
+      .toUpperCase();
+  }
+  return (words[0] || 'OP').slice(0, 2).toUpperCase();
+}
 
 export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -37,6 +53,7 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [paidAmount, setPaidAmount] = useState(page.transaction?.amount || 0);
+  const [previewItem, setPreviewItem] = useState<CheckoutItem | null>(null);
 
   const {
     isInitialized,
@@ -144,15 +161,12 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
             <div className="pp-merchant__logo">
               <SafeImage
                 src={page.merchant.logo}
-                alt=""
+                alt={page.merchant.name}
                 className="pp-merchant__img"
-                fallback={<User size={22} strokeWidth={1.75} />}
+                fallback={<span className="pp-merchant__initials">{merchantInitials(page.merchant.name)}</span>}
               />
             </div>
-            <div>
-              <p className="pp-merchant__name">{page.merchant.name}</p>
-              <p className="pp-merchant__trust">Trusted merchant on OnePay</p>
-            </div>
+            <p className="pp-merchant__name">{page.merchant.name}</p>
           </div>
           {/* Local brand mark; next/image is unnecessary for this tiny static asset. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -225,7 +239,17 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
                           />
                         </span>
                         <span className="pp-item__copy">
-                          <strong>{item.name}</strong>
+                          <button
+                            type="button"
+                            className="pp-item__name"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setPreviewItem(item);
+                            }}
+                          >
+                            {item.name}
+                          </button>
                           {item.description ? <em>{item.description}</em> : null}
                         </span>
                         <span className="pp-item__price">
@@ -363,10 +387,9 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
           {feedback ? <p className={`pp-feedback is-${feedback.type}`}>{feedback.text}</p> : null}
 
           <button className="pp-pay" type="button" disabled={!canPay} onClick={onPay}>
-            <Lock size={16} />
-            {payButtonLabel()}
-            <span aria-hidden>→</span>
-          </button>
+              <Lock size={18} strokeWidth={2.4} />
+              {payButtonLabel()}
+            </button>
         </section>
       </div>
 
@@ -401,14 +424,31 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
         >
           <div className={`pp-modal__card pp-result-card ${showFailed ? 'is-error' : 'is-success'}`}>
             <button type="button" className="pp-result__close" onClick={closeResult} aria-label="Close">
-              <X size={16} strokeWidth={2.4} />
+              <X size={15} strokeWidth={2.2} />
             </button>
             <div className="pp-result">
               {showSuccess ? (
-                <div className="pp-result__burst" aria-hidden>
-                  <span /><span /><span /><span /><span /><span />
-                  <div className="pp-result__badge is-success">
-                    <Check size={34} strokeWidth={3.2} />
+                <div className="pp-result__art" aria-hidden>
+                  <span className="pp-spark pp-spark--dash a" />
+                  <span className="pp-spark pp-spark--dot b" />
+                  <span className="pp-spark pp-spark--sq c" />
+                  <span className="pp-spark pp-spark--dash d" />
+                  <span className="pp-spark pp-spark--ring e" />
+                  <span className="pp-spark pp-spark--dot f" />
+                  <span className="pp-spark pp-spark--dot g" />
+                  <span className="pp-spark pp-spark--dash h" />
+                  <div className="pp-result__halo">
+                    <div className="pp-result__mark">
+                      <svg viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M6.5 12.2l3.7 3.7 7.3-7.6"
+                          stroke="#fff"
+                          strokeWidth="2.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -434,6 +474,7 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
           </div>
         </dialog>
       ) : null}
+      <ItemPreviewModal item={previewItem} onClose={() => setPreviewItem(null)} />
       </div>
     </div>
   );

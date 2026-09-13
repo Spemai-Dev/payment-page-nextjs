@@ -7,6 +7,8 @@ import { parseAmount } from '@/lib/money';
 import { isValidPageRef, isValidTransactionId } from '@/lib/pageRef';
 import { rateLimitAllow } from '@/lib/rateLimit';
 import { sanitizeRichHtml, sanitizeText } from '@/lib/sanitize';
+import { fetchAppBranding } from '@/lib/merchantApp';
+import { resolveCheckoutLogo } from '@/lib/merchantLogo';
 import type {
   ApiEnvelope,
   CheckoutPage,
@@ -30,8 +32,10 @@ function mapItems(items: PaymentPageApiItem[] | undefined, fallbackCurrency: str
   return items
     .filter((item) => typeof item?.id === 'number' && Number.isFinite(item.id))
     .map((item) => {
-      const images = Array.isArray(item.images) ? item.images : [];
-      const image = images.map((src) => sanitizeImageUrl(src)).find(Boolean) ?? null;
+      const images = Array.isArray(item.images)
+        ? item.images.map((src) => sanitizeImageUrl(src)).filter((src): src is string => Boolean(src))
+        : [];
+      const image = images[0] ?? null;
       const currency = sanitizeText(item.currency || fallbackCurrency, 8) || 'LKR';
       const grossAmount = parseAmount(item.gross_amount);
       const discountAmount = parseAmount(item.discounts);
@@ -41,8 +45,9 @@ function mapItems(items: PaymentPageApiItem[] | undefined, fallbackCurrency: str
         id: item.id,
         collectionItemId: Number(item.collection_item_id) || 0,
         name: sanitizeText(item.item_name, 120) || 'Item',
-        description: sanitizeText(item.description, 240),
+        description: sanitizeText(item.description, 300),
         image,
+        images,
         currency,
         grossAmount,
         discountAmount,
@@ -88,10 +93,10 @@ function mapPage(pageRef: string, data: PaymentPageApiData): CheckoutPage {
     items: isPlainText ? [] : mapItems(data.items, currency),
     customFields: mapCustomFields(data.custom_fields),
     merchant: {
-      name: sanitizeText(merchant.merchant_name, 120) || 'Merchant',
+      name: sanitizeText(merchant.merchant_name, 120),
       email: sanitizeText(merchant.merchant_email, 254),
       mobile: sanitizeText(merchant.merchant_mobile, 32),
-      logo: sanitizeImageUrl(merchant.merchant_logo),
+      logo: resolveCheckoutLogo(merchant.merchant_logo),
     },
     transaction: transaction
       ? {
@@ -103,6 +108,23 @@ function mapPage(pageRef: string, data: PaymentPageApiData): CheckoutPage {
           failureReason: sanitizeText(transaction.failure_reason, 240),
         }
       : null,
+  };
+}
+
+async function applyMerchantBranding(page: CheckoutPage): Promise<CheckoutPage> {
+  const app = await fetchAppBranding(page.appId);
+  const name = page.merchant.name || app?.businessName || 'Merchant';
+  const logo = page.merchant.logo || app?.logo || null;
+
+  if (name === page.merchant.name && logo === page.merchant.logo) return page;
+
+  return {
+    ...page,
+    merchant: {
+      ...page.merchant,
+      name,
+      logo,
+    },
   };
 }
 
@@ -162,7 +184,7 @@ export const getPublicPaymentPage = cache(async function getPublicPaymentPage(
       };
     }
 
-    return { ok: true, page: mapPage(pageRef, payload.data) };
+    return { ok: true, page: await applyMerchantBranding(mapPage(pageRef, payload.data)) };
   } catch {
     return { ok: false, status: 502, message: GENERIC_ERROR };
   }

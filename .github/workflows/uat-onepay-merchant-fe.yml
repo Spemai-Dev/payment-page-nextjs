@@ -37,6 +37,8 @@ jobs:
           NEXT_PUBLIC_ONEPAY_API_BASE_URL: https://onepay-api-manager-uat-hvbbasa5f0fwezcq.southeastasia-01.azurewebsites.net
           NEXT_PUBLIC_MERCHANT_API_BASE_URL: https://onepay-merchant-be-v3-uat-e3hthrhkg4bbe8dx.southeastasia-01.azurewebsites.net
           SUPPORT_URL: https://onepay.lk
+          ONEPAY_FILES_BASE_URL: https://files.onepayapi.lk
+          ONEPAY_FILES_API_KEY: ${{ secrets.ONEPAY_FILES_API_KEY }}
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'

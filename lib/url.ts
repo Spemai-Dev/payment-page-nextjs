@@ -2,6 +2,7 @@ const DEFAULT_IMAGE_HOSTS = [
   'onepay.blob.core.windows.net',
   'cdn.onepay.lk',
   'files.onepayapi.lk',
+  'storage.googleapis.com',
 ];
 
 function extraImageHosts() {
