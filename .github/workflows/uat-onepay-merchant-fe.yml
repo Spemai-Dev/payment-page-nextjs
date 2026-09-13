@@ -32,6 +32,11 @@ jobs:
           api_location: "" # Api source code path - optional
           output_location: "" # Built app content directory - optional
           ###### End of Repository/Build Configurations ######
+        env:
+          PAYMENT_PAGE_API_BASE_URL: https://api-gateway-uat-dpe9eegffresc9dv.southeastasia-01.azurewebsites.net/gateway/payment_page
+          NEXT_PUBLIC_ONEPAY_API_BASE_URL: https://onepay-api-manager-uat-hvbbasa5f0fwezcq.southeastasia-01.azurewebsites.net
+          NEXT_PUBLIC_MERCHANT_API_BASE_URL: https://onepay-merchant-be-v3-uat-e3hthrhkg4bbe8dx.southeastasia-01.azurewebsites.net
+          SUPPORT_URL: https://onepay.lk
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
