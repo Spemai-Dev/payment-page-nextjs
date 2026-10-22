@@ -165,20 +165,37 @@ a { color: inherit; }
   padding: 1.15rem 1.2rem 1.25rem;
 }
 
+/* Covers are cropped to 16:9 in the merchant portal. Show the whole image;
+   when the height cap makes the box wider, a blurred copy fills the sides. */
 .pp-cover {
+  position: relative;
   width: 100%;
-  height: 96px;
+  aspect-ratio: 16 / 9;
+  max-height: 260px;
   border-radius: 14px;
   overflow: hidden;
   margin-bottom: 1.15rem;
   flex-shrink: 0;
+  background: #eef2f0;
 }
 
-.pp-cover__img {
-  display: block;
+.pp-cover__backdrop {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: blur(18px) saturate(1.1);
+  transform: scale(1.15);
+  opacity: 0.75;
+}
+
+.pp-cover__img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   object-position: center;
 }
 
@@ -1157,7 +1174,7 @@ a { color: inherit; }
   }
 
   .pp-cover {
-    height: 80px;
+    max-height: 240px;
     border-radius: 12px;
     margin-bottom: 1rem;
     flex-shrink: 0;
@@ -1293,5 +1310,5 @@ a { color: inherit; }
 
 @media (max-width: 560px) {
   .pp-fields { grid-template-columns: 1fr; }
-  .pp-cover { height: 88px; }
+  .pp-cover { max-height: 220px; }
 }

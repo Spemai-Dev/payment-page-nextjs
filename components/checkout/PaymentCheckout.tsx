@@ -196,6 +196,7 @@ export default function PaymentCheckout({ page }: PaymentCheckoutProps) {
         >
           {hasBanner ? (
             <div className="pp-cover">
+              <SafeImage src={page.coverImage} alt="" className="pp-cover__backdrop" />
               <SafeImage src={page.coverImage} alt="" className="pp-cover__img" />
             </div>
           ) : null}
